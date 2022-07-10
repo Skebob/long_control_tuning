@@ -12,6 +12,8 @@
 
 int enabled_;
 
+int speed;
+
 
 ros::Publisher throttlePub;
 ros::Subscriber curAccelSub;
@@ -40,6 +42,7 @@ void publishThrottleCmd(float value){
     throttleCmd.f64_cmd = value;
 
     throttlePub.publish(throttleCmd);
+    ROS_INFO("DEBUG: %f\n", value);
 }
 
 // puts throttle at 40% for half a second, then holds throttle at 20%
@@ -61,24 +64,38 @@ int main(int argc, char** argv){
     curAccelSub = n.subscribe<sensor_msgs::Imu>("imu/data", 1, curAccelCallback);
 
     // start the car by giving it a big throttle for a short amount of time, then bring throttle to lesser position
-    startCar();
+    float ped_val = 0.4;
+    int forked = 0;
+
+    std_msgs::Float64 desaccel_msg;
+    ros::Time startTime = ros::Time::now();
+    ros::Rate loop_rate(30);
 
     while(ros::ok()){
-        if(isConstantVelocity()){
-            // pass off control to longitude controller
-            // roslaunch echo echo.launch
-            if(fork() == 0){
-                // TODO exec long controller
-                execlp("roslaunch", "roslaunch", "echo", "testecho.launch", NULL);
-            } else {
-                ros::Duration(0.5).sleep(); // sleep for half a second
-                // give small desired acceleration
-                std_msgs::Float64 desAccelMsg;
-		        desAccelMsg.data = 0.1; // THIS MAY NEED TO CHANGE
-		        desAccelPub.publish(desAccelMsg);
+        if(forked == 0){
+            ros::Time now = ros::Time::now();
+            float time = now.toSec() - startTime.toSec();
+            if(time > 0.5){
+                ped_val = 0.3;
+            }
+            if(isConstantVelocity() && (time > 1)){
+                forked = 1;
+                // pass off control to longitude controller
+                // roslaunch echo echo.launch
+                if(fork() == 0){
+                    // TODO exec long controller
+                    execlp("roslaunch", "roslaunch", "echo", "testecho.launch", NULL);
+                } else {
+                    //ros::Duration(0.5).sleep(); // sleep for half a second
+                    desaccel_msg.data = 0.2;
+                } 
             } 
-        } 
+            publishThrottleCmd(ped_val);
+        } else {
+            desAccelPub.publish(desaccel_msg);
+        }
         
+        ros::spinOnce();
     }
 
     return 0;
