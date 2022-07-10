@@ -207,3 +207,6 @@ include_directories(
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
+
+add_executable(longtesting src/long_testing.cpp)
+target_link_libraries(longtesting ${catkin_LIBRARIES})

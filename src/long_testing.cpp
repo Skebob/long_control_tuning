@@ -69,7 +69,7 @@ int main(int argc, char** argv){
             // roslaunch echo echo.launch
             if(fork() == 0){
                 // TODO exec long controller
-                execlp("roslaunch", "roslaunch", "echo". "testecho.launch", NULL);
+                execlp("roslaunch", "roslaunch", "echo", "testecho.launch", NULL);
             } else {
                 ros::Duration(0.5).sleep(); // sleep for half a second
                 // give small desired acceleration
