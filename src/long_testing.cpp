@@ -87,7 +87,7 @@ int main(int argc, char** argv){
                     execlp("roslaunch", "roslaunch", "echo", "testecho.launch", NULL);
                 } else {
                     //ros::Duration(0.5).sleep(); // sleep for half a second
-                    desaccel_msg.data = 0.2;
+                    desaccel_msg.data = 0.3;
                 } 
             } 
             publishThrottleCmd(ped_val);
