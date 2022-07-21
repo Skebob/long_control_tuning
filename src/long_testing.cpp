@@ -12,6 +12,9 @@
 
 #include "sensor_msgs/Imu.h"
 
+// THIS IS THE OPTION TO CHOOSE WHAT TEST TO ENABLE
+//#define constantaccel__
+
 int enabled_;
 
 int speed;
@@ -25,13 +28,14 @@ ros::Publisher desAccelPub;
 
 // this may need to be tuned, I just guessed on the value
 // IF (-CONSTANT_ACCEL_BOUNDRY < [measured acceleration] < CONSTANT_ACCEL_BOUNDRY) THEN car is at zero acceleration (constant velocity)
-#define CONSTANT_ACCEL_BOUNDRY 0.005 // [-0.005, 0.005]
+#define CONSTANT_ACCEL_BOUNDRY 0.1 // [-0.1, 0.1]
+#define NUMACCELVALS 6
 
 float accel_cur;
 float accel_des = 0;
 
-void curAccelCallback(const sensor_msgs::Imu::ConstPtr& msg) {
-	accel_cur = (msg->linear_acceleration).x;	
+void curAccelCallback(const std_msgs::Float64::ConstPtr& msg) {
+	accel_cur = (msg->data);	
 }
 
 int isConstantVelocity(){
@@ -85,12 +89,13 @@ int main(int argc, char** argv){
 
     desAccelPub = n.advertise<std_msgs::Float64>("desAccel", 1);
 
-    curAccelSub = n.subscribe<sensor_msgs::Imu>("imu/data", 1, curAccelCallback);
+    curAccelSub = n.subscribe<std_msgs::Float64>("xAccelFilter/accel_x", 1, curAccelCallback);
 
     // this is the throttle position that will be held until the car reaches constant velocity
-    float ped_val = 0.4;
+    float ped_val = 0.0;
     // this is the acceleration command passed to the low level longitude controller after the car reaches constant velocity
     float accel_val = 0.3;
+    float accel_vals[NUMACCELVALS] = {0.0, 0.2, 0.4, 0.6, 0.8, 1};
 
     int forked = 0;
 
@@ -100,6 +105,7 @@ int main(int argc, char** argv){
 
     CarInit();
 
+    #ifdef constantaccel__
     while(ros::ok()){
         if(forked == 0){
             // get current time
@@ -131,6 +137,42 @@ int main(int argc, char** argv){
         }
         
         ros::spinOnce();
+    }
+    #endif
+    float prevtime;
+    int idx_accel = 0;
+    while(ros::ok()){
+        // get current time
+        ros::Time now = ros::Time::now();
+        float time = now.toSec() - startTime.toSec();
+        if(forked == 0){
+            if(isConstantVelocity() && (time > 5)){
+                forked = 1;
+                
+                if(fork() == 0){
+                    // CHILD
+                    // launch low level longitude  controller
+                    execlp("roslaunch", "roslaunch", "echo", "testecho.launch", NULL);
+                    ROS_INFO("Error: control should not reach here");
+                } else {
+                    // PARENT
+                    prevtime = time;
+                }
+            } else {
+                publishThrottleCmd(ped_val);    
+            }
+        } else {
+            // begin giving increasing constant accel values
+            float delta_time = time - prevtime;
+            desaccel_msg.data = accel_vals[idx_accel];
+            
+            if(delta_time > 3){
+                prevtime = time;
+                idx_accel = (idx_accel + 1) % NUMACCELVALS;
+            }
+            
+            desAccelPub.publish(desaccel_msg);
+        }
     }
 
     return 0;
